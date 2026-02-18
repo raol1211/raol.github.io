@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SC Case Parser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #e8c547;
+    --accent2: #4fc3f7;
+    --danger: #ff6b6b;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --success: #69db7c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    padding: 24px 20px 0;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  .header-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding-bottom: 20px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 8vw, 3.5rem);
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    line-height: 1;
+    text-shadow: 0 0 40px rgba(232,197,71,0.3);
+  }
+
+  .logo span {
+    color: var(--accent2);
+  }
+
+  .tagline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  /* Input section */
+  .input-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .card-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    color: var(--accent);
+    min-width: 24px;
+  }
+
+  .card-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Upload area */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    margin: 16px;
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,197,71,0.04);
+  }
+
+  .upload-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .upload-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .upload-label strong {
+    color: var(--accent);
+  }
+
+  .upload-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--success);
+    margin: 8px 16px 0;
+    padding: 6px 10px;
+    background: rgba(105,219,124,0.08);
+    border-radius: 3px;
+    border-left: 3px solid var(--success);
+    display: none;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    margin: 4px 0;
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .divider-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 160px;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+  }
+
+  textarea::placeholder {
+    color: var(--muted);
+  }
+
+  /* Parse button */
+  .parse-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .parse-btn:hover {
+    background: #f0d060;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(232,197,71,0.3);
+  }
+
+  .parse-btn:active {
+    transform: translateY(0);
+  }
+
+  .parse-btn:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Status bar */
+  .status-bar {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    display: none;
+    letter-spacing: 0.05em;
+  }
+
+  .status-bar.error {
+    background: rgba(255,107,107,0.1);
+    border: 1px solid rgba(255,107,107,0.3);
+    color: var(--danger);
+    display: block;
+  }
+
+  .status-bar.info {
+    background: rgba(79,195,247,0.08);
+    border: 1px solid rgba(79,195,247,0.2);
+    color: var(--accent2);
+    display: block;
+  }
+
+  /* Results */
+  .results-section {
+    display: none;
+  }
+
+  .results-section.visible {
+    display: block;
+  }
+
+  .section-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .pdf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .pdf-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 12px;
+    cursor: pointer;
+    transition: all 0.18s;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pdf-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.2s;
+  }
+
+  .pdf-card:hover {
+    border-color: var(--accent);
+    background: rgba(232,197,71,0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  }
+
+  .pdf-card:hover::before {
+    transform: scaleX(1);
+  }
+
+  .pdf-card.godown::before {
+    background: var(--accent2);
+  }
+
+  .pdf-card.godown:hover {
+    border-color: var(--accent2);
+    background: rgba(79,195,247,0.05);
+  }
+
+  .pdf-icon {
+    font-size: 1.6rem;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .pdf-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .pdf-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .download-all-btn {
+    width: 100%;
+    padding: 13px;
+    background: transparent;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-radius: 4px;
+    margin-bottom: 28px;
+    text-transform: uppercase;
+  }
+
+  .download-all-btn:hover {
+    background: rgba(79,195,247,0.08);
+  }
+
+  /* Stats */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    color: var(--accent);
+    line-height: 1;
+    display: block;
+  }
+
+  .stat-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .processing {
+    display: none;
+    text-align: center;
+    padding: 30px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .processing.visible { display: block; }
+
+  .spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .results-section.visible .pdf-card {
+    animation: fadeIn 0.3s ease forwards;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 100%;
+    max-width: 860px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    flex-shrink: 0;
+    gap: 10px;
+  }
+
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .modal-btn {
+    padding: 7px 14px;
+    border-radius: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+
+  .modal-btn.download {
+    background: var(--accent);
+    color: #0a0a0f;
+    font-weight: 600;
+  }
+  .modal-btn.download:hover { background: #f0d060; }
+
+  .modal-btn.close {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .modal-btn.close:hover { color: var(--danger); border-color: var(--danger); }
+
+  .modal-body {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: #1a1a2a;
+  }
+
+  .modal-body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    min-height: 60vh;
+  }
+
+  .modal-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  footer {
+    text-align: center;
+    padding: 30px 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">SC<span>·</span>CASE <span>PARSER</span></div>
+    <div class="tagline">Supreme Court of India // Daily Cause List // PDF Generator</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Input Card -->
+  <div class="input-card">
+    <div class="card-header">
+      <span class="card-num">01</span>
+      <span class="card-title">Upload PDF or Paste Text</span>
+    </div>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" accept=".pdf,.txt" id="fileInput" />
+      <span class="upload-icon">📄</span>
+      <div class="upload-label"><strong>Tap to upload</strong> PDF or TXT</div>
+      <div class="upload-label" style="margin-top:4px;font-size:0.65rem;">or drag and drop</div>
+    </div>
+    <div class="upload-status" id="uploadStatus"></div>
+
+    <div class="divider"><span class="divider-text">or paste text below</span></div>
+
+    <textarea id="textInput" placeholder="Paste cause list text here...&#10;&#10;Example:&#10;DAILY CAUSE LIST FOR DATED : 18-02-2026&#10;COURT NO. 1&#10;1 S.L.P.(C) No. 1234/2025 ..."></textarea>
+  </div>
+
+  <button class="parse-btn" id="parseBtn" onclick="runParse()">⚡ PARSE &amp; GENERATE PDFs</button>
+
+  <div class="status-bar" id="statusBar"></div>
+
+  <div class="processing" id="processing">
+    <div class="spinner"></div><br>Processing cause list...
+  </div>
+
+  <!-- Results -->
+  <div class="results-section" id="results">
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <span class="stat-num" id="statCases">0</span>
+        <div class="stat-label">Total Cases</div>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num" id="statCourts">0</span>
+        <div class="stat-label">Courts</div>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num" id="statGodowns">0</span>
+        <div class="stat-label">Godowns</div>
+      </div>
+    </div>
+
+    <div class="section-label">Court-wise PDFs</div>
+    <div class="pdf-grid" id="courtGrid"></div>
+    <button class="download-all-btn" onclick="downloadAll('court')">⬇ Download All Court PDFs</button>
+
+    <div class="section-label">Godown-wise PDFs</div>
+    <div class="pdf-grid" id="godownGrid"></div>
+    <button class="download-all-btn" onclick="downloadAll('godown')">⬇ Download All Godown PDFs</button>
+
+  </div>
+
+</div>
+
+<footer>SC CASE PARSER // FOR INTERNAL USE // SUPREME COURT OF INDIA</footer>
+
+<!-- PDF Preview Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">COURT 1</div>
+      <div class="modal-actions">
+        <button class="modal-btn download" id="modalDownloadBtn" onclick="modalDownload()">⬇ Download PDF</button>
+        <button class="modal-btn close" onclick="closeModal()">✕ Close</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-loading" id="modalLoading">
+        <div class="spinner"></div>
+        Rendering PDF...
+      </div>
+      <iframe id="modalIframe" style="display:none;"></iframe>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── PDF.js setup ───
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─── State ───
+let parsedCourts = {};
+let parsedGodowns = {};
+let documentDate = '';
+
+// ─── File upload ───
+const fileInput = document.getElementById('fileInput');
+const uploadStatus = document.getElementById('uploadStatus');
+const textInput = document.getElementById('textInput');
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  uploadStatus.style.display = 'block';
+  uploadStatus.textContent = `⏳ Reading ${file.name}...`;
+  try {
+    let text = '';
+    if (file.name.endsWith('.pdf')) {
+      text = await extractPDFText(file);
+    } else {
+      text = await file.text();
+    }
+    textInput.value = text;
+    uploadStatus.textContent = `✓ Loaded: ${file.name} (${text.length.toLocaleString()} chars)`;
+    uploadStatus.style.color = 'var(--success)';
+  } catch(err) {
+    uploadStatus.textContent = `✗ Error reading file: ${err.message}`;
+    uploadStatus.style.color = 'var(--danger)';
+  }
+});
+
+// Drag & drop
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', async e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+});
+
+async function extractPDFText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += pageText + '\n';
+  }
+  return fullText;
+}
+
+// ─── CASE TYPES ───
+const CASE_TYPES = [
+  [/R\.P\.?\s*\(\s*C\s*\)/i,                     "RP(C)"],
+  [/R\.P\.?\s*\(\s*Crl\s*\)/i,                   "RP(Crl)"],
+  [/\bR\.P\./i,                                   "RP"],
+  [/Crl\.?\s*Misc\.?\s*Pet(?:ition)?\.?/i,       "CrlMP"],
+  [/Crl\.?\s*M\.?P\./i,                           "CrlMP"],
+  [/\bC\.C\./i,                                   "CC"],
+  [/\bCC\b/i,                                     "CC"],
+  [/Certified\s*Copy/i,                            "CC"],
+  [/ARBIT\.?\s*PET(?:I?TION)?\.?/i,              "AP"],
+  [/CONMT\.?\s*PET\.?\s*\(\s*C\s*\)/i,           "CP(C)"],
+  [/CONMT\.?\s*PET\.?\s*\(\s*Crl\s*\)/i,         "CP(Crl)"],
+  [/S\.?L\.?P\.?\s*\(\s*Crl\s*\)/i,              "SR"],
+  [/S\.?L\.?P\.?\s*\(\s*C\s*\)/i,                "SC"],
+  [/S\.?L\.?P\.?/i,                               "SLP"],
+  [/W\.?P\.?\s*\(\s*Crl\.?\s*\)/i,               "WR"],
+  [/W\.?P\.?\s*\(\s*C\s*\)/i,                    "WC"],
+  [/T\.?P\.?\s*\(\s*Crl\.?\s*\)/i,               "TR"],
+  [/T\.?P\.?\s*\(\s*C\s*\)/i,                    "TP"],
+  [/T\.?C\.?\s*\(\s*C\s*\)/i,                    "TC(C)"],
+  [/Crl\.?\s*App(?:eal)?\.?/i,                   "AR"],
+  [/\bTP\b/i,                                    "TP"],
+  [/\bTR\b/i,                                    "TR"],
+  [/\bSR\b/i,                                    "SR"],
+  [/\bSC\b/i,                                    "SC"],
+  [/\bWC\b/i,                                    "WC"],
+  [/\bWR\b/i,                                    "WR"],
+  [/\bIA\s+/i,                                    "IA"],
+  [/\bI\.A\./i,                                   "IA"],
+  [/\bMA\s+/i,                                    "MA"],
+  [/\bM\.A\./i,                                   "MA"],
+  [/Crl\.?\s*A\./i,                               "AR"],
+  [/Crl\.?\s*P\./i,                               "CP"],
+  [/Crl\.?\s*Rv\./i,                              "CRv"],
+  [/Crl\.?\s*Rev\./i,                             "CRev"],
+  [/\bC\.A\./i,                                   "CA"],
+  [/\bT\.A\./i,                                   "TA"],
+  [/\bT\.P\./i,                                   "TP"],
+  [/Tr\.?\s*Pet(?:ition)?\.?/i,                  "TP"],
+  [/Trans\.?\s*Pet(?:ition)?\.?/i,               "TP"],
+  [/Sp\.?\s*L\.?\s*P\./i,                        "SLP"],
+  [/Sp\.?\s*L\.?\s*A\./i,                        "SLA"],
+  [/Review\s*Pet(?:ition)?\.?/i,                 "RP"],
+  [/Curative\s*Pet(?:ition)?\.?/i,               "CuP"],
+  [/Contempt\s*Pet(?:ition)?\.?/i,               "CoP"],
+  [/Elec\.?\s*Pet(?:ition)?\.?/i,                "EP"],
+  [/\bP\.I\.L\./i,                               "PIL"],
+  [/\bPIL\b/i,                                   "PIL"],
+  [/Misc\.?\s*A\./i,                             "MA"],
+  [/Misc\.?\s*P\./i,                             "MP"],
+  [/\bA\.O\./i,                                  "AO"],
+  [/Arb\.?\s*P\./i,                              "AP"],
+  [/\bE\.P\./i,                                  "EP"],
+  [/\bO\.A\./i,                                  "OA"],
+  [/\bO\.S\./i,                                  "OS"],
+  [/\bSuit\b/i,                                  "Suit"],
+  [/Diary\s*No\./i,                              "D"],
+  [/\bRef\./i,                                   "Ref"],
+];
+
+function detectCaseType(text) {
+  // Stop at party name indicators so "IA No." buried in party text doesn't match
+  for (const stopPat of [/\bVersus\b/i, /\bFOR\s+ADMISSION\b/i]) {
+    const ms = text.search(stopPat);
+    if (ms !== -1) text = text.slice(0, ms);
+  }
+  for (const [pat, label] of CASE_TYPES) {
+    const m = text.match(pat);
+    if (m) return [label, m.index + m[0].length];
+  }
+  return ["Unknown", null];
+}
+
+function extractCaseNumber(text, typeEnd) {
+  // Truncate at party name / IA lines so we don't pick up numbers from party text
+  const afterFull = text.slice(typeEnd);
+  let cutoff = afterFull.length;
+  for (const stopPat of [/\bVersus\b/i, /\bFOR\s+ADMISSION\b/i, /\bIA\s+No\./i]) {
+    const ms = afterFull.search(stopPat);
+    if (ms !== -1 && ms < cutoff) cutoff = ms;
+  }
+  text = text.slice(0, typeEnd + cutoff);
+  const after = text.slice(typeEnd);
+  let m;
+  // Range with No.
+  m = after.match(/No\.?\s*([\d]+[-–][\d]+)\s*\/\s*(\d{4})/);
+  if (m) { const first = parseInt(m[1]); return [first, `${first}/${m[2]}`, m[2]]; }
+  // No. single
+  m = after.match(/No\.?\s*(\d+)\s*\/\s*(\d{4})/);
+  if (m) return [parseInt(m[1]), `${m[1]}/${m[2]}`, m[2]];
+  // No. dash year
+  m = after.match(/No\.?\s*(\d+)\s*[-–]\s*(\d{4})/);
+  if (m) return [parseInt(m[1]), `${m[1]}/${m[2]}`, m[2]];
+  // OF
+  m = after.match(/No\.?\s*(\d+)\s+OF\s+(\d{4})/i);
+  if (m) return [parseInt(m[1]), `${m[1]}/${m[2]}`, m[2]];
+  // direct
+  m = after.match(/^\s*(\d+)\s*\/\s*(\d{4})/);
+  if (m) return [parseInt(m[1]), `${m[1]}/${m[2]}`, m[2]];
+  m = after.match(/^\s*(\d+)\s*[-–]\s*(\d{4})/);
+  if (m) return [parseInt(m[1]), `${m[1]}/${m[2]}`, m[2]];
+  return [0, "Unknown", "Unknown"];
+}
+
+function detectCourt(line) {
+  const t = line.trim().toUpperCase();
+  if (/CHIEF\s+JUSTICE/.test(t)) return 1;
+  const m = t.match(/COURT\s*(?:NO\.?|NUMBER)\s*:?\s*(\d+)/);
+  if (m) return parseInt(m[1]);
+  return null;
+}
+
+function extractDate(raw) {
+  const lines = raw.split('\n').slice(0, 20);
+  for (const line of lines) {
+    const m = line.match(/DAILY\s+CAUSE\s+LIST\s+FOR\s+DATED\s*:\s*(\d{2}[-/]\d{2}[-/]\d{4})/i);
+    if (m) return m[1].replace(/\//g, '-');
+  }
+  return new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
+}
+
+// ─── Nested case detector ───
+function detectNestedCase(text) {
+  // Truncate before party names / IA lines to prevent false matches
+  for (const stopPat of [/\bVersus\b/i, /\bIA\s+No\./i, /\bFOR\s+ADMISSION\b/i]) {
+    const ms = text.search(stopPat);
+    if (ms !== -1) text = text.slice(0, ms);
+  }
+  if (!/\bin\b/i.test(text)) return null;
+  for (const m_in of [...text.matchAll(/\bin\b/gi)]) {
+    const left  = text.slice(0, m_in.index).trim();
+    const right = text.slice(m_in.index + m_in[0].length).trim();
+
+    // find rightmost number on left
+    let outerNumYearRaw = null, outerTypeText = null;
+    for (const mm of [...left.matchAll(/(?:No\.?\s*)?\d+(?:-\d+)?\/\d{4}/gi)]) {
+      outerNumYearRaw = mm[0];
+      outerTypeText = left.slice(0, mm.index).trim();
+    }
+    if (!outerNumYearRaw) continue;
+
+    // find leftmost number on right
+    const m2 = right.match(/(?:No\.?\s*)?(\d+(?:-\d+)?\/\d{4})/i);
+    if (!m2) continue;
+    const innerNumYear = m2[1];
+    const innerTypeText = right.slice(0, m2.index).trim();
+
+    // match types — strip trailing "No." artifact from innerTypeText
+    let outerType = null, innerType = null;
+    const outerUp = outerTypeText.replace(/\s*No\.?\s*$/i, '').trim().toUpperCase();
+    const innerUp = innerTypeText.replace(/\s*No\.?\s*$/i, '').trim().toUpperCase();
+    for (const [, label] of CASE_TYPES) {
+      if (label.toUpperCase() === outerUp && !outerType) outerType = label;
+      if (label.toUpperCase() === innerUp && !innerType) innerType = label;
+    }
+    for (const [pat, label] of CASE_TYPES) {
+      if (!outerType && pat.test(outerTypeText)) outerType = label;
+      if (!innerType && pat.test(innerTypeText)) innerType = label;
+    }
+    if (!outerType || !innerType) continue;
+
+    const mOuter = outerNumYearRaw.match(/(\d+)(?:-\d+)?\/(\d{4})/);
+    if (!mOuter) continue;
+    const mInner = innerNumYear.match(/(\d+)(?:-\d+)?\/(\d{4})/);
+    if (!mInner) continue;
+
+    return {
+      outerType, outerNum: parseInt(mOuter[1]), outerYear: mOuter[2],
+      innerType, innerNum: mInner[1], innerYear: mInner[2]
+    };
+  }
+  return null;
+}
+
+// ─── Line joiner ───
+const CASE_KW_JS = /(?:MA\b|M\.A\.|S\.L\.P|SLP\s*\(|C\.A\.|W\.P\.|WP\s*\(|T\.P\.|TP\s*\(|Crl\.|C\.C\.|CC\b|ARBIT\b|CONMT\b|R\.P\.|RP\b|Sp\.L|PIL\b|Misc\.|Diary\s+No\.|Review\s+Pet|Curative\s+Pet|Contempt\s+Pet|Elec\.|Arb\.|Trans\s+Pet)/i;
+const SECTION_ONLY_JS = /^(?:PIL-W|PIL-C|I{1,3}|IV|V|VI{1,3}|IX|X{1,3}|XI{1,3}|XIV|XV|XVI{1,3}|XIX|XX)(?:-[A-Z])?$/i;
+
+function splitStackedItems(line) {
+  // Handle "3 4 5 6 ARBIT... WP... Diary..." — multiple item numbers before case types
+  const mStacked = line.match(/^((?:\d+\s+){2,})/);
+  if (!mStacked) return [line];
+  const itemNums = mStacked[1].trim().split(/\s+/);
+  const rest = line.slice(mStacked[0].length);
+  if (!CASE_KW_JS.test(rest)) return [line];
+
+  // Split rest on case-type keyword boundaries
+  const parts = rest.split(/(?=\s(?:MA\b|M\.A\.|S\.L\.P|SLP\s*\(|C\.A\.|W\.P\.|WP\s*\(|T\.P\.|TP\s*\(|Crl\.|C\.C\.|CC\b|ARBIT\b|CONMT\b|R\.P\.|RP\b|PIL\b|Misc\.|Diary\s+No\.))/i)
+    .map(p => p.trim()).filter(Boolean);
+
+  // Merge section-only fragments onto previous part
+  const merged = [];
+  for (const part of parts) {
+    if (SECTION_ONLY_JS.test(part) && merged.length > 0) {
+      merged[merged.length - 1] += ' ' + part;
+    } else {
+      merged.push(part);
+    }
+  }
+
+  // Only keep parts that start with a known case keyword (discard party name trailing text)
+  const result = [];
+  let lastNum = parseInt(itemNums[itemNums.length - 1]) || 0;
+  for (let i = 0; i < merged.length; i++) {
+    if (!CASE_KW_JS.test(merged[i])) break;
+    const num = i < itemNums.length ? itemNums[i] : String(++lastNum);
+    result.push(num + ' ' + merged[i]);
+  }
+  return result.length > 0 ? result : [line];
+}
+
+function joinLines(raw) {
+  // First handle stacked item numbers per line
+  const stackedProcessed = [];
+  for (const line of raw.split('\n')) {
+    const expanded = splitStackedItems(line.trim());
+    stackedProcessed.push(...expanded);
+  }
+  raw = stackedProcessed.join('\n');
+
+  // Then split standard run-on cases
+  raw = raw.replace(
+    /(?<!\d)(\s+)(\d+(?:\.\d+)?)(\s+(?:Connected\s+)?)(?=(?:MA\b|M\.A\.|S\.L\.P|SLP|C\.A\.|W\.P|WP|T\.P|TP|Crl|C\.C\.|CC|ARBIT|CONMT|R\.P|RP|Sp\.L|PIL|Misc|Diary|Review|Curative|Contempt|Elec|Arb|Trans|Tr\.)\b)/gi,
+    (_, _sp, num, sp2) => '\n' + num + sp2
+  );
+
+  const lines = raw.split('\n');
+  const joined = [];
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) { joined.push(''); continue; }
+    if (joined.length > 0) {
+      const prev = joined[joined.length - 1].trim();
+      // ends with No.
+      if (/No\.\s*$/.test(prev) && /^\d+(?:-\d+)?[-/]\d{4}/.test(s)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+      // item + type, next is No. XXXX
+      if (/^\d+(?:\.\d+)?\s+(?:Connected\s+)?.+/.test(prev) && /^No\.\s*\d+/.test(s)) {
+        if (!/\d+\/\d{4}/.test(prev) && !/\d+-\d+\/\d{4}/.test(prev)) {
+          joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+          continue;
+        }
+      }
+      // ends with " in"
+      if (/\bin\s*$/.test(prev)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+      // prev is a complete case line, next starts with "in " (e.g. "in C.A. No.")
+      if (/\d+[-–]?\d*\/\d{4}/.test(prev) && /^in\s+/i.test(s)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+      // ends with case type abbreviation (dotted or with parens), next is No.
+      if (/(?:\b(?:C\.A\.|S\.L\.P\.?|Crl\.A\.|W\.P\.|T\.P\.|C\.C\.|R\.P\.|M\.A\.)|[A-Za-z]\([A-Za-z]+\))\s*$/.test(prev) && /^No\.\s*\d+/.test(s)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+      // split sub-numbers
+      if (/^\d+\.\s*$/.test(prev) && /^[1-5]\s*$/.test(s)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + s;
+        continue;
+      }
+      if (/^\d+\.\s*[1-5]\s*$/.test(prev) && s.toLowerCase() === 'connected') {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+      if (/^\d+\.\d+\s+Connected\s*$/.test(prev)) {
+        joined[joined.length - 1] = joined[joined.length - 1].trimEnd() + ' ' + s;
+        continue;
+      }
+    }
+    joined.push(line);
+  }
+  return joined;
+}
+
+// ─── Godown assignment ───
+function assignGodown(type, year, section) {
+  const y = parseInt(year) || 0;
+  if (type === "CC") return "RAM";
+  if (type === "CrlMP" && y === 2017) return "RAM";
+  if (type === "SR" && y >= 2017 && y <= 2024) return "RAM";
+  if (["TP","TR"].includes(type) && y >= 2017 && y <= 2023) return "RAM";
+  if (["WC","WR"].includes(type) && y >= 2017 && y <= 2023) return "RAM";
+  if (type === "CrlMP" && y >= 2004 && y <= 2016) return "JAI";
+  if (type === "SR" && (y <= 2016 || y >= 2025)) return "JAI";
+  if (["TP","TR"].includes(type) && (y <= 2016 || y >= 2024)) return "JAI";
+  if (["WC","WR"].includes(type) && (y <= 2016 || y >= 2024)) return "JAI";
+  if (type === "D.R" && y >= 2024 && y <= 2026) return "JAI";
+  if (type === "D.C" && y <= 2023) return "RAJ";
+  if (type === "D.R" && y <= 2023) return "RAJ";
+  if (type === "SC" && y <= 2019) return "RAJ";
+  if (type === "SC" && y >= 2020 && y <= 2024) return "LAX";
+  if (type === "SC" && (y === 2025 || y === 2026)) return "PIN";
+  if (type === "D.C" && y >= 2024 && y <= 2026) return "PIN";
+  if (type === "AP" && (y === 2025 || y === 2026)) return "PIN";
+  if (type === "CA") return "RAV";
+  if (type === "AR") return "RAV";
+  return "";
+}
+
+// ─── Main parser ───
+function parseAll(raw) {
+  const courts = {};
+  let currentCourt = null;
+  const lines = joinLines(raw);
+
+  // Preprocess: clean unicode, tabs, etc.
+  const cleanLines = lines.map(l => {
+    return l
+      .replace(/\u200b|\u200c|\u200d/g, '')
+      .replace(/\u202f|\u00a0/g, ' ')
+      .replace(/\t/g, ' ')
+      .replace(/\u2018|\u2019/g, "'")
+      .replace(/\u201c|\u201d/g, '"')
+      .replace(/ +/g, ' ');
+  });
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    const stripped = line.trim();
+    if (!stripped) continue;
+
+    // Court header
+    const courtNo = detectCourt(stripped);
+    if (courtNo !== null) {
+      currentCourt = courtNo;
+      if (!courts[currentCourt]) courts[currentCourt] = [];
+      continue;
+    }
+
+    // Skip section headers
+    if (stripped.startsWith('[') && stripped.endsWith(']')) continue;
+    // Skip IA lines
+    if (/^IA\s+No\./i.test(stripped)) continue;
+
+    // Sub-item
+    let sno, rest;
+    const mSub = stripped.match(/^\s*(\d+)\s*\.\s*([1-5])(?:\s+Connected)?\s+(.+)/);
+    if (mSub) {
+      sno = `${mSub[1]}.${mSub[2]}`;
+      rest = mSub[3];
+    } else {
+      const mMain = stripped.match(/^(\d+)\.?\s+(.+)/);
+      if (mMain) {
+        sno = mMain[1];
+        rest = mMain[2];
+        if (/^(Connected|PIL-W|IX-A|XVI-A|IV-B|III-A|XII|X|II|III-B|IV-C|II-B|II-A|II-C)\s*$/i.test(rest)) continue;
+      } else continue;
+    }
+
+    // Nested case?
+    const nested = detectNestedCase(rest);
+    let caseType, numInt, caseNoStr, year;
+
+    if (nested && nested.outerType !== 'IA') {
+      const innerDisplay = `${nested.innerNum}/${nested.innerYear}`;
+      caseType   = `${nested.outerType} in ${nested.innerType} ${innerDisplay}`;
+      numInt     = nested.outerNum;
+      caseNoStr  = String(nested.outerNum);
+      year       = nested.outerYear;
+    } else {
+      const [ct, typeEnd] = detectCaseType(rest);
+      if (ct === "Unknown" || typeEnd === null) continue;
+      if (ct === "IA") continue; // IA is never a standalone case entry
+      const [ni, cns, yr] = extractCaseNumber(rest, typeEnd);
+      if (cns === "Unknown") continue;
+      caseType = ct; numInt = ni; caseNoStr = cns; year = yr;
+    }
+
+    // Section
+    let section = '';
+    const sectionPat = /^(PIL-W|PIL-C|I{1,3}|IV|V|VI{1,3}|IX|X{1,3}|XI{1,3}|XIV|XV|XVI{1,3}|XIX|XX)(-[A-Z])?$/i;
+    // First check: trailing section token on the rest line itself (e.g. "MA 278/2026 in C.A. 10930/2018 XVII")
+    const trailingSecM = rest.match(/\s+((?:PIL-[WC]|I{1,3}|IV|V|VI{1,3}|IX|X{1,3}|XI{1,3}|XIV|XV|XVI{1,3}|XIX|XX)(?:-[A-Z])?)\s*$/i);
+    if (trailingSecM) { section = trailingSecM[1]; }
+    // Then check subsequent lines if not found yet
+    if (!section) {
+      for (let j = i+1; j < Math.min(i+5, cleanLines.length); j++) {
+        const nl = cleanLines[j].trim();
+        if (!nl) continue;
+        const cl = nl.replace('(SCLSC)', '').trim();
+        if (sectionPat.test(cl)) { section = cl; break; }
+        if (/^\d+\s+/.test(nl)) break;
+        if (/Versus|AND ORS|Limited|PETITIONER|RESPONDENT/i.test(nl)) break;
+      }
+    }
+
+    // Diary type
+    let finalType = caseType;
+    if (caseType === "D") {
+      finalType = (section && (/^II(-[A-E])?$/i.test(section) || section.toUpperCase() === 'X')) ? "D.R" : "D.C";
+    }
+
+    const godown = assignGodown(finalType, year, section);
+
+    if (currentCourt === null) { currentCourt = 0; courts[0] = courts[0] || []; }
+
+    courts[currentCourt].push({
+      Item_No: sno, Case_No: caseNoStr, Case_No_Int: numInt,
+      Year: year, Type: finalType, Section: section, Godown: godown, Court: currentCourt
+    });
+  }
+
+  // Sort each court by case number
+  for (const c of Object.keys(courts)) {
+    courts[c].sort((a,b) => a.Case_No_Int - b.Case_No_Int);
+  }
+  return courts;
+}
+
+// ─── PDF generation (portrait A4, B&W print-optimised) ───
+function generatePDF(title, entries, date, subtitle) {
+  const { jsPDF } = window.jspdf;
+
+  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const W = 210, H = 297, margin = 8;
+  const BLACK = [0, 0, 0];
+  const WHITE = [255, 255, 255];
+
+  // Fixed-width columns sized exactly to content at font 11 (~2mm/char + 3mm padding):
+  //   S.NO: 12mm  — "1601" 4 chars (fixed)
+  //   TYPE: 72mm  — longest field, gets space freed from fixed cols
+  //   CASE NO: 55mm — "12345/2025"
+  //   YEAR: 12mm  — "2025" 4 chars (fixed)
+  //   SEC:  16mm  — "XVI-A" 5 chars
+  //   GDN:  11mm  — "RAM" 3 chars (fixed)
+  const colW = [12, 72, 55, 12, 16, 11];
+  const colX = colW.map((_, i) => margin + colW.slice(0, i).reduce((a, b) => a + b, 0));
+  const headers = ['S.NO.', 'TYPE', 'CASE NO', 'YEAR', 'SEC', 'GDN'];
+
+  const FONT_SIZE  = 11;    // comfortable reading size
+  const LINE_H     = 4.5;  // mm per line of text at font size 11
+  const ROW_PAD    = 2;    // vertical padding inside each row (top+bottom)
+  const MIN_ROW_H  = LINE_H + ROW_PAD;  // single-line row height
+  const HDR_H      = 8;
+
+  const tableWidth = colW.reduce((a, b) => a + b, 0);
+  const tableRight = margin + tableWidth;
+
+  const PAGE_HDR_H  = 22;
+  const PAGE_FTR_H  = 8;
+  const tableTopY   = margin + PAGE_HDR_H;
+  const tableBottomY = H - margin - PAGE_FTR_H;
+
+  // ── Measure how many lines a value needs in a given column ──
+  function lineCount(val, colIdx) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(FONT_SIZE);
+    const maxW = colW[colIdx] - 3;
+    const lines = doc.splitTextToSize(val, maxW);
+    return lines.length;
+  }
+
+  // ── Compute actual row height for an entry ──
+  function rowHeight(e) {
+    const vals = [
+      String(e.Item_No), String(e.Type), String(e.Case_No),
+      String(e.Year), String(e.Section || ''), String(e.Godown || '')
+    ];
+    const maxLines = Math.max(...vals.map((v, i) => lineCount(v, i)));
+    return maxLines * LINE_H + ROW_PAD;
+  }
+
+  // ── Draw page header ──
+  function drawPageHeader(pageIdx, totalPages) {
+    doc.setTextColor(...BLACK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('SUPREME COURT OF INDIA', W / 2, margin + 6, { align: 'center' });
+
+    doc.setFontSize(9);
+    doc.text(title, W / 2, margin + 12, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`Date: ${date}`, margin, margin + 12);
+    doc.text(`Page ${pageIdx} / ${totalPages}`, tableRight, margin + 12, { align: 'right' });
+
+    doc.setFontSize(7.5);
+    doc.text(`Total: ${entries.length} case${entries.length !== 1 ? 's' : ''}`, tableRight, margin + 18, { align: 'right' });
+
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.5);
+    doc.line(margin, margin + 20, tableRight, margin + 20);
+  }
+
+  // ── Draw table header row ──
+  function drawTableHeader(y) {
+    doc.setFillColor(...BLACK);
+    doc.rect(margin, y, tableWidth, HDR_H, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(FONT_SIZE);
+    headers.forEach((h, i) => {
+      doc.text(h, colX[i] + 1.5, y + HDR_H - 2.2, { maxWidth: colW[i] - 3 });
+    });
+    doc.setTextColor(...BLACK);
+    return y + HDR_H;
+  }
+
+  // ── Draw one data row at y, return new y ──
+  function drawRow(e, y, rh, isAlt) {
+    if (isAlt) {
+      doc.setFillColor(230, 230, 230);
+      doc.rect(margin, y, tableWidth, rh, 'F');
+    }
+    const vals = [
+      String(e.Item_No), String(e.Type), String(e.Case_No),
+      String(e.Year), String(e.Section || ''), String(e.Godown || '')
+    ];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(FONT_SIZE);
+    doc.setTextColor(...BLACK);
+    vals.forEach((val, i) => {
+      const lines = doc.splitTextToSize(val, colW[i] - 3);
+      // vertically centre single-line; top-align multi-line
+      const textY = lines.length === 1
+        ? y + rh / 2 + LINE_H / 2 - 0.5
+        : y + LINE_H + ROW_PAD / 2;
+      doc.text(lines, colX[i] + 1.5, textY);
+    });
+
+    // Row border lines
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.15);
+    doc.line(margin, y + rh, tableRight, y + rh);       // bottom rule
+    doc.setLineWidth(0.3);
+    for (let i = 1; i < colX.length; i++) {             // column dividers
+      doc.line(colX[i], y, colX[i], y + rh);
+    }
+
+    return y + rh;
+  }
+
+  // ── Pre-compute row heights ──
+  const rowHeights = entries.map(e => rowHeight(e));
+
+  // ── Paginate dynamically ──
+  let pageIdx = 1;
+  let y = 0;
+  let totalPages = 0; // will do two passes: first count pages, then render
+
+  // Pass 1: count total pages
+  {
+    let curY = tableTopY + HDR_H;
+    for (let i = 0; i < rowHeights.length; i++) {
+      if (curY + rowHeights[i] > tableBottomY) {
+        totalPages++;
+        curY = tableTopY + HDR_H;
+      }
+      curY += rowHeights[i];
+    }
+    totalPages++; // last page
+  }
+
+  // Pass 2: render
+  let altRow = 0;
+  let tableStartY = tableTopY;
+  let prevY = tableTopY;
+
+  drawPageHeader(pageIdx, totalPages);
+  y = drawTableHeader(tableTopY);
+  tableStartY = tableTopY;
+
+  // Outer border drawn at end of each page
+  function closePage(tableStart, tableEnd) {
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, tableStart, tableWidth, tableEnd - tableStart, 'S');
+    // header bottom line
+    doc.line(margin, tableStart + HDR_H, tableRight, tableStart + HDR_H);
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const rh = rowHeights[i];
+
+    // Page break if row won't fit
+    if (y + rh > tableBottomY) {
+      closePage(tableStartY, y);
+
+      // Footer
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text('SC Case Parser  ·  Supreme Court of India', W / 2, H - margin - 1, { align: 'center' });
+
+      doc.addPage();
+      pageIdx++;
+      altRow = 0;
+
+      drawPageHeader(pageIdx, totalPages);
+      y = drawTableHeader(tableTopY);
+      tableStartY = tableTopY;
+    }
+
+    y = drawRow(entries[i], y, rh, altRow % 2 === 1);
+    altRow++;
+  }
+
+  // Close last page
+  closePage(tableStartY, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text('SC Case Parser  ·  Supreme Court of India', W / 2, H - margin - 1, { align: 'center' });
+
+  return doc;
+}
+
+}
+
+// ─── Stored PDFs for download-all ───
+let storedPDFs = { court: {}, godown: {} };
+
+function downloadPDF(type, key) {
+  const pdf = storedPDFs[type][key];
+  if (pdf) pdf.save(`${key.replace(/ /g,'_')}.pdf`);
+}
+
+function downloadAll(type) {
+  for (const key of Object.keys(storedPDFs[type])) {
+    storedPDFs[type][key].save(`${key.replace(/ /g,'_')}.pdf`);
+  }
+}
+
+// ─── Main run ───
+function runParse() {
+  const raw = textInput.value.trim();
+  if (!raw) {
+    showStatus('Please paste text or upload a file first.', 'error');
+    return;
+  }
+
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('statusBar').className = 'status-bar';
+  document.getElementById('processing').classList.add('visible');
+  document.getElementById('parseBtn').disabled = true;
+
+  setTimeout(() => {
+    try {
+      documentDate = extractDate(raw);
+      parsedCourts = parseAll(raw);
+
+      // Build godowns
+      parsedGodowns = {};
+      for (const courtEntries of Object.values(parsedCourts)) {
+        for (const e of courtEntries) {
+          const g = e.Godown || 'MIS';
+          if (!parsedGodowns[g]) parsedGodowns[g] = [];
+          parsedGodowns[g].push(e);
+        }
+      }
+      // Sort godown entries by type count
+      for (const g of Object.keys(parsedGodowns)) {
+        const typeCounts = {};
+        for (const e of parsedGodowns[g]) typeCounts[e.Type] = (typeCounts[e.Type]||0)+1;
+        parsedGodowns[g].sort((a,b) => typeCounts[a.Type]-typeCounts[b.Type] || a.Type.localeCompare(b.Type) || a.Case_No_Int-b.Case_No_Int);
+      }
+
+      const totalCases = Object.values(parsedCourts).reduce((s,a)=>s+a.length,0);
+      if (totalCases === 0) throw new Error('No cases found. Check your input text.');
+
+      // Stats
+      document.getElementById('statCases').textContent = totalCases;
+      document.getElementById('statCourts').textContent = Object.keys(parsedCourts).length;
+      document.getElementById('statGodowns').textContent = Object.keys(parsedGodowns).length;
+
+      // Generate court PDFs
+      storedPDFs = { court: {}, godown: {} };
+      const courtGrid = document.getElementById('courtGrid');
+      courtGrid.innerHTML = '';
+      const courtKeys = Object.keys(parsedCourts).map(Number).sort((a,b)=>a-b);
+      courtKeys.forEach((c, idx) => {
+        const entries = parsedCourts[c];
+        const key = `Court_${c}_${documentDate}`;
+        const pdf = generatePDF(`COURT NO. ${c}`, entries, documentDate, `${entries.length} cases`);
+        storedPDFs.court[key] = pdf;
+        const card = document.createElement('div');
+        card.className = 'pdf-card';
+        card.style.animationDelay = `${idx * 0.05}s`;
+        card.innerHTML = `<span class="pdf-icon">📋</span><span class="pdf-name">COURT ${c}</span><span class="pdf-count">${entries.length} cases</span>`;
+        card.onclick = () => openModal('court', key, `COURT NO. ${c}`);
+        courtGrid.appendChild(card);
+      });
+
+      // Generate godown PDFs
+      const godownGrid = document.getElementById('godownGrid');
+      godownGrid.innerHTML = '';
+      const godownKeys = Object.keys(parsedGodowns).sort();
+      godownKeys.forEach((g, idx) => {
+        const entries = parsedGodowns[g];
+        const key = `Godown_${g}_${documentDate}`;
+        const pdf = generatePDF(`GODOWN: ${g}`, entries, documentDate, `${entries.length} cases`);
+        storedPDFs.godown[key] = pdf;
+        const card = document.createElement('div');
+        card.className = 'pdf-card godown';
+        card.style.animationDelay = `${idx * 0.05}s`;
+        card.innerHTML = `<span class="pdf-icon">🗄️</span><span class="pdf-name">${g}</span><span class="pdf-count">${entries.length} cases</span>`;
+        card.onclick = () => openModal('godown', key, `GODOWN: ${g}`);
+        godownGrid.appendChild(card);
+      });
+
+      document.getElementById('processing').classList.remove('visible');
+      document.getElementById('results').classList.add('visible');
+      document.getElementById('parseBtn').disabled = false;
+
+    } catch(err) {
+      document.getElementById('processing').classList.remove('visible');
+      document.getElementById('parseBtn').disabled = false;
+      showStatus(`Error: ${err.message}`, 'error');
+    }
+  }, 50);
+}
+
+function showStatus(msg, type) {
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.className = `status-bar ${type}`;
+}
+
+// ─── Modal ───
+let currentModalType = null, currentModalKey = null;
+
+function openModal(type, key, title) {
+  currentModalType = type;
+  currentModalKey = key;
+
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('modalIframe').style.display = 'none';
+  document.getElementById('modalLoading').style.display = 'flex';
+
+  const pdf = storedPDFs[type][key];
+  // Generate blob URL for inline viewing
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+
+  const iframe = document.getElementById('modalIframe');
+  iframe.onload = () => {
+    document.getElementById('modalLoading').style.display = 'none';
+    iframe.style.display = 'block';
+  };
+  // Append #toolbar=1&view=FitH for better inline viewing
+  iframe.src = url + '#toolbar=1&view=FitH';
+
+  // Fallback: if iframe doesn't load in 3s (mobile browsers block blob iframes), show download prompt
+  setTimeout(() => {
+    if (iframe.style.display === 'none') {
+      document.getElementById('modalLoading').innerHTML = `
+        <div style="text-align:center;padding:20px;">
+          <div style="font-size:2rem;margin-bottom:12px;">📱</div>
+          <div style="color:var(--text);margin-bottom:8px;font-size:0.85rem;">Inline preview not supported on this browser.</div>
+          <div style="color:var(--muted);font-size:0.72rem;margin-bottom:16px;">Tap Download to save and view the PDF.</div>
+          <button class="modal-btn download" onclick="modalDownload()" style="font-size:0.85rem;padding:10px 20px;">⬇ Download PDF</button>
+        </div>`;
+    }
+  }, 3000);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  const iframe = document.getElementById('modalIframe');
+  // Revoke old blob URL to free memory
+  if (iframe.src && iframe.src.startsWith('blob:')) URL.revokeObjectURL(iframe.src);
+  iframe.src = '';
+  iframe.style.display = 'none';
+  document.getElementById('modalLoading').style.display = 'flex';
+  document.getElementById('modalLoading').innerHTML = `<div class="spinner"></div>Rendering PDF...`;
+}
+
+function closeModalOnOverlay(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+function modalDownload() {
+  if (currentModalType && currentModalKey) downloadPDF(currentModalType, currentModalKey);
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>
